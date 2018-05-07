@@ -168,11 +168,55 @@ describe Itunes::Receipt do
     end
 
     context 'when autorenew subscription' do
-      before do
+      it 'should return valid Receipt instance for autorenew subscription' do
         fake_json :autorenew_subscription
+
+        original_transaction_id = '1000000057005439'
+        original_purchase_date = Time.utc(2012, 10, 11, 14, 45, 40)
+        receipt = Itunes::Receipt.verify! 'autorenew_subscription'
+        receipt.should be_instance_of Itunes::Receipt
+        receipt.quantity == 1
+        receipt.product_id.should == 'com.notkeepingitreal.fizzbuzz.subscription.autorenew1m'
+        receipt.transaction_id.should == '1000000055076747'
+        receipt.purchase_date.should == Time.utc(2012, 10, 13, 19, 40, 8)
+        receipt.bid.should == 'com.notkeepingitreal.fizzbuzz'
+        receipt.bvrs.should == '1.0'
+        receipt.original.quantity.should be_nil
+        receipt.original.transaction_id.should == original_transaction_id
+        receipt.original.purchase_date.should == original_purchase_date
+        receipt.expires_date.should == Time.utc(2012, 10, 13, 19, 45, 8)
+        receipt.cancellation_date.should be_nil
+        receipt.receipt_data.should be_nil
+        receipt.web_order_line_item_id.should == '1000000026553289'
+
+        # Those attributes are not returned from iTunes Connect Sandbox
+        receipt.app_item_id.should be_nil
+        receipt.version_external_identifier.should be_nil
+
+        latest = receipt.latest
+        latest.should be_instance_of Itunes::Receipt
+        latest.quantity == 1
+        latest.product_id.should == 'com.notkeepingitreal.fizzbuzz.subscription.autorenew1m'
+        latest.transaction_id.should == '1000000052076747'
+        latest.purchase_date.should == Time.utc(2012, 10, 13, 19, 40, 8)
+        latest.expires_date.should == Time.utc(2012, 10, 13, 19, 50, 8) # five minutes after the "old" receipt
+        latest.cancellation_date.should be_nil
+        latest.bid.should == 'com.notkeepingitreal.fizzbuzz'
+        latest.bvrs.should == '1.0'
+        latest.original.quantity.should be_nil
+        latest.original.transaction_id.should == original_transaction_id
+        latest.original.purchase_date.should == original_purchase_date
+        latest.receipt_data.should == 'junk='
+        receipt.web_order_line_item_id.should == '1000000026553289'
+
+        # Those attributes are not returned from iTunes Connect Sandbox
+        latest.app_item_id.should be_nil
+        latest.version_external_identifier.should be_nil
       end
 
-      it 'should return valid Receipt instance for autorenew subscription' do
+      it 'should return valid Receipt instance for autorenew subscription (old format)' do
+        fake_json :old_autorenew_subscription
+
         original_transaction_id = '1000000057005439'
         original_purchase_date = Time.utc(2012, 10, 11, 14, 45, 40)
         receipt = Itunes::Receipt.verify! 'autorenew_subscription'
@@ -218,11 +262,9 @@ describe Itunes::Receipt do
     end
 
     context 'when expired autorenew subscription' do
-      before do
-        fake_json :autorenew_subscription_expired
-      end
-
       it 'should raise ExpiredReceiptReceived exception' do
+        fake_json :autorenew_subscription_expired
+
         expect do
           Itunes::Receipt.verify! 'autorenew_subscription_expired'
         end.to raise_error Itunes::Receipt::ExpiredReceiptReceived do |e|
@@ -230,14 +272,21 @@ describe Itunes::Receipt do
         end
       end
 
+      it 'should raise ExpiredReceiptReceived exception (old format)' do
+        fake_json :old_autorenew_subscription_expired
+
+        expect do
+          Itunes::Receipt.verify! 'autorenew_subscription_expired'
+        end.to raise_error Itunes::Receipt::ExpiredReceiptReceived do |e|
+          e.receipt.should_not be_nil
+        end
+      end
     end
 
     context 'when cancelled autorenew subscription' do
-      before do
-        fake_json :autorenew_subscription_cancelled
-      end
-
       it 'should return valid Receipt instance for autorenew subscription, with the cancellation_date field set' do
+        fake_json :autorenew_subscription_cancelled
+
         receipt = Itunes::Receipt.verify! 'autorenew_subscription_cancelled'
         receipt.should be_instance_of Itunes::Receipt
         receipt.purchase_date.should == Time.utc(2012, 10, 13, 19, 40, 8)
@@ -245,6 +294,15 @@ describe Itunes::Receipt do
         receipt.cancellation_date.should == Time.utc(2012, 10, 13, 19, 42, 8) # user cancelled via Apple Customer Support 2 minutes after their subscription began
       end
 
+      it 'should return valid Receipt instance for autorenew subscription, with the cancellation_date field set (old format)' do
+        fake_json :old_autorenew_subscription_cancelled
+
+        receipt = Itunes::Receipt.verify! 'autorenew_subscription_cancelled'
+        receipt.should be_instance_of Itunes::Receipt
+        receipt.purchase_date.should == Time.utc(2012, 10, 13, 19, 40, 8)
+        receipt.expires_date.should == Time.utc(2012, 10, 13, 19, 45, 8)
+        receipt.cancellation_date.should == Time.utc(2012, 10, 13, 19, 42, 8) # user cancelled via Apple Customer Support 2 minutes after their subscription began
+      end
     end
 
     context 'when offline' do
